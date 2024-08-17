@@ -52,11 +52,11 @@ def getenv():
         ),
         obs_builder=DefaultObs(zero_padding=2),
         action_parser=RepeatAction(LookupTableAction(), repeats=8),
-        reward_fn=ProximityReward(),#CombinedReward(
-        #     (GoalReward(), 10.),
-        #     (TouchReward(), 1.),
-        #     (ProximityReward(), .1)
-        # ),
+        reward_fn=CombinedReward(
+             (GoalReward(), 12.),
+             (TouchReward(), 3.),
+             (ProximityReward(), 1.)
+        ),
         termination_cond=GoalCondition(),
         truncation_cond=AnyCondition(
             TimeoutCondition(timeout=300.),
@@ -104,6 +104,7 @@ def simulate(ppo: PPO, env_builder, render: bool, queue = None):
     rewards = {agent: [] for agent in training_env.agents}
     next_states = {agent: [] for agent in training_env.agents}
     dones = {agent: [] for agent in training_env.agents}
+    log_probs = {agent: [] for agent in training_env.agents}
 
     while not terminated and not truncated:
         if render:
@@ -112,7 +113,9 @@ def simulate(ppo: PPO, env_builder, render: bool, queue = None):
 
         for agent_id, action_space in training_env.action_spaces.items():
             states[agent_id].append(obs_dict[agent_id])
-            actions[agent_id].append(ppo.act(obs_dict[agent_id]))
+            action, logprobs = ppo.act(obs_dict[agent_id])
+            actions[agent_id].append(action)
+            log_probs[agent_id].append(logprobs)
 
         obs_dict, reward_dict, terminated_dict, truncated_dict = training_env.step({agent_id: actions[agent_id][-1] for agent_id in training_env.agents})
 
@@ -127,63 +130,37 @@ def simulate(ppo: PPO, env_builder, render: bool, queue = None):
 
         if any(chain(terminated_dict.values(), truncated_dict.values())):
             break
-    if not queue:
-        return states, actions, rewards, next_states, dones
-    else:
-        queue.put((states, actions, rewards, next_states, dones))
-        return None
+    return states, actions, rewards, next_states, dones, log_probs
 
 
 if threads == 1:
     for _ in tqdm(range(passes)):
-        states, actions, rewards, next_states, dones = simulate(agent, getenv, render)
+        states, actions, rewards, next_states, dones, log_probs = simulate(agent, getenv, render)
         for agent_id in list(states.keys()):
-            agent.learn(states[agent_id], actions[agent_id], rewards[agent_id], next_states[agent_id], dones[agent_id])
+            agent.learn(states[agent_id], actions[agent_id], rewards[agent_id], next_states[agent_id], dones[agent_id], log_probs[agent_id])
         if _ % 1000 == 0:
             agent.save_model(f"models/{now}.pth")
 else:
 
-    is_frozen = False
 
 
     progress_bar = tqdm(total=passes)
-    def simulate_wrapper(i, queue):
-        return simulate(agent, getenv, False, queue=queue)
-    for i in range(passes//threads):
-        queues = [multiprocessing.Queue() for _ in range(threads)]
-        ps = []
-        for i in range(threads):
-            p = multiprocessing.Process(target=simulate_wrapper, args=(i, queues[i]))
-            p.start()
-            ps.append(p)
-        finished = []
-        done = False
-        def update_finished():
-            global finished,done
-            while len(finished) != len(queues):
-                for i in range(len(queues)):
-                    if not queues[i].empty() and i not in finished:
-                        finished.append(i)
-            done = True
-        threading.Thread(target=update_finished).start()
-        jpm = 0
-        while not done or len(finished) != 0:
-            # bandaid code to prevent infinite loop
-            jpm+=1
-            if jpm == 10000000:
-                print("Infinite loop detected, breaking")
-                if len(finished) == 0:
-                    finished = [i.get() for i in queues]
-            if len(finished) == 0:
-                pass
-            else:
-                result = queues[finished[0]].get()
-                for agent_id in list(result[0].keys()):
-                    agent.learn(result[0][agent_id], result[1][agent_id], result[2][agent_id], result[3][agent_id], result[4][agent_id])
+    def simulate_wrapper(i):
+        return simulate(agent, getenv, False)
+    with ProcessPoolExecutor(max_workers=threads) as executor:
+        for i in range(0, passes, threads):
+            futures = {executor.submit(simulate_wrapper, i + j) for j in range(threads)}
+            results = []
+            for future in as_completed(futures):
+                results.append(future.result())
                 progress_bar.update(1)
-                finished.pop(0)
-        if i % 1000//threads == 0:
-            agent.save_model(f"models/{now}.pth")
+            for result in results:
+                for agent_id in list(result[0].keys()):
+                    agent.learn(result[0][agent_id], result[1][agent_id], result[2][agent_id], result[3][agent_id], result[4][agent_id], result[5][agent_id])
+
+
+            if i % 1000//threads == 0:
+                agent.save_model(f"models/{now}.pth")
 
 
 

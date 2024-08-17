@@ -5,6 +5,7 @@ import numpy as np
 from typing import List, Dict, Any
 from rlgym.api import RewardFunction, AgentID
 from rlgym.rocket_league.api import GameState
+torch.multiprocessing.set_sharing_strategy('file_system')
 
 # My implementation of the Proximal Policy Optimization (PPO) algorithm
 # Serrano Academy: https://www.youtube.com/watch?v=TjHH_--7l8g
@@ -13,7 +14,7 @@ class PPO:
         self.gamma = gamma
         self.eps_clip = eps_clip
         self.K = K
-        self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = device if device is not None else torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         self.policynet = nn.Sequential(
             nn.Linear(state_dim, int(policysize/2)),
@@ -45,17 +46,19 @@ class PPO:
         state = torch.FloatTensor(state).to(self.device)
         action_probs = self.policynet(state)
         dist = torch.distributions.Categorical(logits=action_probs)
-        action = dist.sample().cpu().detach().numpy()
-        return np.array([action]).astype(np.int32)
+        action = dist.sample().cpu().detach()
+        log_probs = dist.log_prob(action).detach()
+        action = action.numpy()
+        return np.array([action]).astype(np.int32), log_probs
 
-    def learn(self, states, actions, rewards, next_states, dones):
+    def learn(self, states, actions, rewards, next_states, dones, log_probs):
         # Convert to tensors
         states = torch.FloatTensor(np.array(states)).to(self.device)
         actions = torch.tensor(np.array(actions)).to(self.device)
         rewards = torch.tensor(rewards).to(self.device)
         next_states = torch.FloatTensor(np.array(next_states)).to(self.device)
         dones = torch.tensor(dones, dtype=torch.float32).to(self.device)
-
+        log_probs = torch.tensor(log_probs).to(self.device)
         # GAE parameters
         lambda_ = 0.95
 
@@ -82,7 +85,7 @@ class PPO:
             # Policy loss with PPO clipping
             action_probs = self.policynet(states)
             dist = torch.distributions.Categorical(logits=action_probs)
-            old_log_probs = dist.log_prob(actions).detach()
+            old_log_probs = log_probs
             new_log_probs = dist.log_prob(actions)
 
             ratio = torch.exp(new_log_probs - old_log_probs)
