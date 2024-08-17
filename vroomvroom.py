@@ -12,7 +12,7 @@ from rlgym.rocket_league.sim import RocketSimEngine
 from rlgym.rocket_league.rlviser import RLViserRenderer
 from rlgym.rocket_league.state_mutators import MutatorSequence, FixedTeamSizeMutator, KickoffMutator
 
-from libvroom import PPO, ProximityReward, NoMovementPenalty, merge_models
+from libvroom import PPO, ProximityReward, NoMovementPenalty, merge_models, BallPosReward, SpeedReward
 
 import torch
 from tqdm import tqdm
@@ -53,9 +53,11 @@ def getenv():
         obs_builder=DefaultObs(zero_padding=2),
         action_parser=RepeatAction(LookupTableAction(), repeats=8),
         reward_fn=CombinedReward(
-             (GoalReward(), 12.),
-             (TouchReward(), 3.),
-             (ProximityReward(), 1.)
+            (GoalReward(), 12.),
+            (TouchReward(), 3.),
+            (ProximityReward(), 1.),
+            (BallPosReward(), 2.),
+            (SpeedReward(), 0.5)
         ),
         termination_cond=GoalCondition(),
         truncation_cond=AnyCondition(

@@ -180,3 +180,30 @@ class NoMovementPenalty(RewardFunction[AgentID, GameState, float]):
     def _get_reward(self, agent: AgentID, state: GameState) -> float:
         self.lastpos[agent] = state.cars[agent].physics.position
         return 1 if list(self.lastpos[agent].astype(np.int32)) != list(state.cars[agent].physics.position.astype(np.int32)) else -1
+
+
+
+class SpeedReward(RewardFunction[AgentID, GameState, float]):
+    def reset(self, agents: List[AgentID], initial_state: GameState, shared_info: Dict[str, Any]) -> None:
+        pass
+    def get_rewards(self, agents: List[AgentID], state: GameState, is_terminated: Dict[AgentID, bool],
+                    is_truncated: Dict[AgentID, bool], shared_info: Dict[str, Any]) -> Dict[AgentID, float]:
+        return {agent: self._get_reward(agent, state) for agent in agents}
+
+    def _get_reward(self, agent: AgentID, state: GameState) -> float:
+        return int(np.linalg.norm(state.cars[agent].physics.linear_velocity))
+
+class BallPosReward(RewardFunction[AgentID, GameState, float]):
+    def reset(self, agents: List[AgentID], initial_state: GameState, shared_info: Dict[str, Any]) -> None:
+        pass
+    def get_rewards(self, agents: List[AgentID], state: GameState, is_terminated: Dict[AgentID, bool],
+                    is_truncated: Dict[AgentID, bool], shared_info: Dict[str, Any]) -> Dict[AgentID, float]:
+        return {agent: self._get_reward(agent, state) for agent in agents}
+
+    def _get_reward(self, agent: AgentID, state: GameState) -> float:
+        ballpos = state.ball.position
+        if str(agent).startswith("blue"):
+            return 1 if ballpos[1] < 0 else -1
+        else:
+            return 1 if ballpos[1] > 0 else -1
+        return 0
