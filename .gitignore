@@ -1,0 +1,11 @@
+models/*
+collision_meshes/*
+rlut_meshes/*
+assets/*
+__pycache__/*
+rlviser
+umodel
+settings.txt
+notify.log
+assets.path
+cache/*

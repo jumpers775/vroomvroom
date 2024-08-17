@@ -1,0 +1,16 @@
+name: vroomvroom
+channels:
+  - conda-forge
+  - pytorch
+dependencies:
+  - python=3.12
+  - numpy=1.26.4
+  - pip=24.2
+  - gymnasium=0.29.1
+  - pytorch=2.4.0
+  - stable-baselines3=2.3.2
+  - shimmy>=0.2.1
+  - pip:
+    - rocketsim
+    - rl-gym[rl-sim] --pre
+    - rlvisor-py
