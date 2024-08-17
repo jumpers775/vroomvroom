@@ -169,6 +169,7 @@ else:
         jpm = 0
         while not done or len(finished) != 0:
             # bandaid code to prevent infinite loop
+            jpm+=1
             if jpm == 10000000:
                 print("Infinite loop detected, breaking")
                 if len(finished) == 0:
