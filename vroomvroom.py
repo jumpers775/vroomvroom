@@ -35,6 +35,7 @@ parser.add_argument('-m', '--model', type=str, help='model to load', default=Non
 parser.add_argument('-r', '--render', action='store_true', help='render the game', default=False)
 parser.add_argument('-p', '--passes', type=int, help='number of passes', default=int(1e6))
 parser.add_argument('-t', '--threads', type=int, help='number of threads', default=os.cpu_count())
+parser.add_argument('-nt', '--nosave', action='store_true', help='Dont save', default=False)
 
 args = parser.parse_args()
 
@@ -43,6 +44,8 @@ render = args.render
 passes = args.passes - (args.passes % args.threads)
 
 threads = args.threads if not render else 1
+
+save = args.nosave
 
 def getenv():
     return RLGym(
@@ -140,7 +143,7 @@ if threads == 1:
         states, actions, rewards, next_states, dones, log_probs = simulate(agent, getenv, render)
         for agent_id in list(states.keys()):
             agent.learn(states[agent_id], actions[agent_id], rewards[agent_id], next_states[agent_id], dones[agent_id], log_probs[agent_id])
-        if _ % 1000 == 0:
+        if _ % 1000 == 0 and save:
             agent.save_model(f"models/{now}.pth")
 else:
 
@@ -161,13 +164,13 @@ else:
                     agent.learn(result[0][agent_id], result[1][agent_id], result[2][agent_id], result[3][agent_id], result[4][agent_id], result[5][agent_id])
 
 
-            if i % 1000//threads == 0:
-                agent.save_model(f"models/{now}.pth")
+            if i % 1000//threads == 0 and save:
+                agent.save_model(f"models/{now}.pth" if not args.model else args.model)
 
 
 
-
-    agent.save_model(f"models/{now}.pth")
+    if save:
+        agent.save_model(f"models/{now}.pth" if not args.model else args.model)
 
 
 env.close()
